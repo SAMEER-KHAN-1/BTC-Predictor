@@ -3,6 +3,38 @@ import requests
 import pandas as pd
 import numpy as np
 
+st.set_page_config(page_title="BTC Predictor", layout="wide")
+
+# -----------------------------
+# STYLE
+# -----------------------------
+st.markdown("""
+<style>
+.big-title {
+    font-size: 40px;
+    font-weight: bold;
+    color: #00FFD1;
+}
+.card {
+    background-color: #111;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+}
+.metric {
+    font-size: 28px;
+    font-weight: bold;
+}
+.label {
+    color: gray;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# -----------------------------
+# FETCH DATA
+# -----------------------------
+@st.cache_data
 def get_data():
     url = "https://data-api.binance.vision/api/v3/klines"
     params = {"symbol":"BTCUSDT","interval":"1h","limit":500}
@@ -16,28 +48,52 @@ data = get_data()
 
 returns = np.log(data / data.shift(1)).dropna()
 
+# -----------------------------
+# MODEL
+# -----------------------------
 mu = returns.mean()
-sigma = returns.std()
+
+long_vol = returns.std()
+short_vol = returns.tail(10).std()
+sigma = 0.7 * long_vol + 0.3 * short_vol
+sigma = sigma * 1.08
 
 current_price = data.iloc[-1]
 
-# GBM simulation
-Z = np.random.randn(2000)
+Z = np.random.randn(3000)
 sims = current_price * np.exp((mu - 0.5 * sigma**2) + sigma * Z)
 
-low, high = np.percentile(sims, [2.5, 97.5])
+low, high = np.percentile(sims, [3, 97])
 
-# dummy metrics (you can hardcode your Colab results here)
-coverage = 0.9537
-avg_width = 1285.93
+# -----------------------------
+# UI
+# -----------------------------
+st.markdown('<div class="big-title">🚀 BTC 1H Predictor (GBM)</div>', unsafe_allow_html=True)
 
-st.title("BTC 1-Hour Predictor (GBM)")
+col1, col2, col3 = st.columns(3)
 
-st.metric("Current Price", f"${current_price:.2f}")
-st.metric("Predicted Range", f"${low:.2f} - ${high:.2f}")
+with col1:
+    st.markdown('<div class="card"><div class="label">Current Price</div><div class="metric">${:.2f}</div></div>'.format(current_price), unsafe_allow_html=True)
 
-st.subheader("Backtest Metrics")
-st.write(f"Coverage: {coverage}")
-st.write(f"Avg Width: {avg_width}")
+with col2:
+    st.markdown('<div class="card"><div class="label">Predicted Low</div><div class="metric">${:.2f}</div></div>'.format(low), unsafe_allow_html=True)
 
-st.line_chart(data.tail(50))
+with col3:
+    st.markdown('<div class="card"><div class="label">Predicted High</div><div class="metric">${:.2f}</div></div>'.format(high), unsafe_allow_html=True)
+
+st.markdown("---")
+
+# Backtest metrics (update manually from Colab)
+coverage = 0.9432
+width = 1225.49
+
+col4, col5 = st.columns(2)
+
+with col4:
+    st.metric("Coverage", coverage)
+
+with col5:
+    st.metric("Avg Width", width)
+
+st.markdown("### 📈 Recent Price Movement")
+st.line_chart(data.tail(100))
